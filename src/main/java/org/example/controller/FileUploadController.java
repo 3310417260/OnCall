@@ -2,10 +2,10 @@ package org.example.controller;
 
 import org.example.config.FileUploadConfig;
 import org.example.dto.FileUploadRes;
+import org.example.response.ApiResponse;
 import org.example.service.VectorIndexService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,11 +25,13 @@ public class FileUploadController {
 
     private static final Logger logger = LoggerFactory.getLogger(FileUploadController.class);
 
-    @Autowired
-    private FileUploadConfig fileUploadConfig;
+    private final FileUploadConfig fileUploadConfig;
+    private final VectorIndexService vectorIndexService;
 
-    @Autowired
-    private VectorIndexService vectorIndexService;
+    public FileUploadController(FileUploadConfig fileUploadConfig, VectorIndexService vectorIndexService) {
+        this.fileUploadConfig = fileUploadConfig;
+        this.vectorIndexService = vectorIndexService;
+    }
 
     @PostMapping(value = "/api/upload", consumes = "multipart/form-data")
     public ResponseEntity<?> upload(@RequestParam("file") MultipartFile file) {
@@ -85,53 +87,11 @@ public class FileUploadController {
                     file.getSize()
             );
 
-            // 使用统一的API响应格式
-            ApiResponse<FileUploadRes> apiResponse = new ApiResponse<>();
-            apiResponse.setCode(200);
-            apiResponse.setMessage("success");
-            apiResponse.setData(response);
-            
-            return ResponseEntity.ok(apiResponse);
+            return ResponseEntity.ok(ApiResponse.success(response));
 
         } catch (IOException e) {
-            ApiResponse<String> errorResponse = new ApiResponse<>();
-            errorResponse.setCode(500);
-            errorResponse.setMessage("文件上传失败: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(errorResponse);
-        }
-    }
-
-    /**
-     * 统一 API 响应格式
-     */
-    public static class ApiResponse<T> {
-        private int code;
-        private String message;
-        private T data;
-
-        public int getCode() {
-            return code;
-        }
-
-        public void setCode(int code) {
-            this.code = code;
-        }
-
-        public String getMessage() {
-            return message;
-        }
-
-        public void setMessage(String message) {
-            this.message = message;
-        }
-
-        public T getData() {
-            return data;
-        }
-
-        public void setData(T data) {
-            this.data = data;
+                    .body(ApiResponse.<String>error("文件上传失败: " + e.getMessage()));
         }
     }
 
