@@ -1,78 +1,78 @@
-# SuperBizAgent
+# OpsPilot AI
 
-> 基于 Spring Boot + AI Agent 的智能问答与运维系统
+> 面向智能问答与 AIOps 排障的 Spring Boot + Agent 实验项目
 
-## 📖 项目简介
+## 项目简介
 
-企业级智能业务代理系统，包含两大核心模块：
+`OpsPilot AI` 是一个以运维辅助和知识检索为核心的 AI Agent 项目，目标是把文档知识库、监控告警、日志查询和多轮对话整合到同一个系统中，提供一个可本地运行、可逐步工程化演进的 OnCall 辅助平台。
 
-### 1. RAG 智能问答
-集成 Milvus 向量数据库和阿里云 DashScope，提供基于检索增强生成的智能问答能力，支持多轮对话和流式输出。
+当前项目包含两条主要能力链路：
 
-### 2. AIOps 智能运维
-基于 AI Agent 的自动化运维系统，采用 Planner-Executor-Replanner 架构，实现告警分析、日志查询、智能诊断和报告生成。
-
-## 🚀 核心特性
-
-- ✅ **RAG 问答**: 向量检索 + 多轮对话 + 流式输出
-- ✅ **AIOps 运维**: 智能诊断 + 多 Agent 协作 + 自动报告
-- ✅ **工具集成**: 文档检索、告警查询、日志分析、时间工具
-- ✅ **会话管理**: 上下文维护、历史管理、自动清理
-- ✅ **Web 界面**: 提供测试界面和 RESTful API
+- 智能问答：支持多轮会话、工具调用和 SSE 流式输出
+- AIOps 分析：支持基于多 Agent 协作的告警诊断和报告生成
 
 
-## 🛠️ 技术栈
+## 当前能力
 
-| 技术 | 版本 | 说明 |
-|------|------|------|
-| Java | 17 | 开发语言 |
-| Spring Boot | 3.2.0 | 应用框架 |
-| Spring AI | - | AI Agent 框架 |
-| DashScope | 2.17.0 | 阿里云 AI 服务 |
-| Milvus | 2.6.10 | 向量数据库 |
+- 基于 DashScope 的聊天与向量化能力
+- 基于 Milvus 的文档向量存储与相似检索
+- 支持 Markdown / TXT 文档上传并自动切片入库
+- 支持 SSE 流式问答接口
+- 支持会话上下文管理
+- 支持通过 MCP 接入腾讯云日志查询能力
+- 支持 Prometheus 告警查询工具
+- 支持本地 mock 模式，便于联调和演示
 
-## 📦 核心模块
 
+## 技术栈
+
+| 技术 | 说明 |
+|------|------|
+| Java 17 | 项目目标 Java 版本 |
+| Spring Boot 3.2.x | Web 应用基础框架 |
+| Spring AI / Spring AI Alibaba | Agent 与模型接入 |
+| DashScope | LLM 与 Embedding 能力 |
+| Milvus | 向量数据库 |
+| MCP | 外部工具能力接入 |
+
+
+## 项目结构
+
+```text
+src/main/java/org/example/
+├── controller/
+│   ├── ChatController.java
+│   ├── AiOpsController.java
+│   ├── SessionController.java
+│   ├── FileUploadController.java
+│   └── MilvusCheckController.java
+├── service/
+│   ├── ChatService.java
+│   ├── AiOpsService.java
+│   ├── SessionService.java
+│   ├── RagService.java
+│   ├── VectorEmbeddingService.java
+│   ├── VectorIndexService.java
+│   ├── VectorSearchService.java
+│   └── DocumentChunkService.java
+├── agent/tool/
+│   ├── DateTimeTools.java
+│   ├── InternalDocsTools.java
+│   ├── QueryMetricsTools.java
+│   └── QueryLogsTools.java
+├── prompt/
+│   ├── ChatPromptService.java
+│   └── AiOpsPromptService.java
+├── dto/
+├── response/
+└── config/
 ```
-SuperBizAgent/
-├── src/main/java/org/example/
-│   ├── controller/
-│   │   └── ChatController.java        # 统一接口控制器 ⭐
-│   ├── service/
-│   │   ├── ChatService.java           # 对话服务 ⭐
-│   │   ├── AiOpsService.java          # AIOps 服务 ⭐
-│   │   ├── RagService.java            # RAG 服务
-│   │   └── Vector*.java               # 向量服务
-│   ├── agent/tool/                    # Agent 工具集
-│   │   ├── DateTimeTools.java         # 时间工具
-│   │   ├── InternalDocsTools.java     # 文档检索
-│   │   ├── QueryMetricsTools.java     # 告警查询
-│   │   └── QueryLogsTools.java        # 日志查询
-│   └── config/                        # 配置类
-├── src/main/resources/
-│   ├── static/                        # Web 界面
-│   └── application.yml                # 应用配置
-└── aiops-docs/                        # 运维文档库
-```
 
 
-## 📡 核心接口
+## 核心接口
 
-### 1. 智能问答接口
+### 1. 普通聊天
 
-**流式对话（推荐）**
-```bash
-POST /api/chat_stream
-Content-Type: application/json
-
-{
-  "Id": "session-123",
-  "Question": "什么是向量数据库？"
-}
-```
-支持 SSE 流式输出、自动工具调用、多轮对话。
-
-**普通对话**
 ```bash
 POST /api/chat
 Content-Type: application/json
@@ -82,113 +82,143 @@ Content-Type: application/json
   "Question": "什么是向量数据库？"
 }
 ```
-一次性返回完整结果，支持工具调用和多轮对话。
 
-### 2. AIOps 智能运维接口
+### 2. 流式聊天
+
+```bash
+POST /api/chat_stream
+Content-Type: application/json
+
+{
+  "Id": "session-123",
+  "Question": "什么是向量数据库？"
+}
+```
+
+### 3. AIOps 分析
 
 ```bash
 POST /api/ai_ops
 ```
-自动执行告警分析流程，生成运维报告（SSE 流式输出）。
 
-### 3. 会话管理
+### 4. 会话管理
 
-- `POST /api/chat/clear` - 清空会话历史
-- `GET /api/chat/session/{sessionId}` - 获取会话信息
+- `POST /api/chat/clear`
+- `GET /api/chat/session/{sessionId}`
 
-### 4. 文件管理
+### 5. 文档上传
 
-- `POST /api/upload` - 上传文件并自动向量化
-- `GET /milvus/health` - Milvus 健康检查
+- `POST /api/upload`
+
+### 6. Milvus 检查
+
+- `GET /milvus/health`
 
 
-## ⚙️ 核心配置
+## 运行依赖
 
-### application.yml
+本地运行至少需要：
 
-```yaml
-server:
-  port: 9900
+- JDK 17
+- Maven
+- Docker Desktop
+- DashScope API Key
 
-# Milvus 向量数据库
-milvus:
-  host: localhost
-  port: 19530
 
-# 阿里云 DashScope
-spring:
-  ai:
-    dashscope:
-      api-key: "${DASHSCOPE_API_KEY}" // 环境变量
+## 环境变量
 
-# RAG 配置
-rag:
-  top-k: 3
-  model: "qwen3-max"
-
-# 文档分片
-document:
-  chunk:
-    max-size: 800
-    overlap: 100
-```
-
-### 环境变量
+项目中的敏感配置建议全部通过环境变量注入。
 
 ```bash
 export DASHSCOPE_API_KEY=your-api-key
 export TENCENT_MCP_SSE_ENDPOINT=/sse/your-private-endpoint
-# 可选，默认就是 https://mcp-api.tencent-cloud.com
 export TENCENT_MCP_BASE_URL=https://mcp-api.tencent-cloud.com
 ```
 
+说明：
 
-## 🚀 快速开始
+- `DASHSCOPE_API_KEY` 必填
+- `TENCENT_MCP_SSE_ENDPOINT` 建议仅保留在本地环境中，不提交到公共仓库
+- `TENCENT_MCP_BASE_URL` 可选，不配置时使用默认值
 
-### 1. 环境准备
+
+## 快速开始
+
+### 1. 启动向量数据库
 
 ```bash
-# 设置 API Key
-export DASHSCOPE_API_KEY=your-api-key
+docker compose -f vector-database.yml up -d
 ```
 
-### 2. 启动应用
+### 2. 启动服务
 
-方法一： 手动启动
 ```bash
-1.先启动向量数据库
-docker compose up -d -f vector-database.yml
-
-2.启动服务
 mvn clean install
 mvn spring-boot:run
 ```
 
-方法二：一键启动
-```bash
-make init  # 会自动启动向量数据库并上传运维文档到向量库
-```
+### 3. 打开页面
 
-
-### 3. 使用示例
-
-**Web 界面**
-```
+```text
 http://localhost:9900
 ```
 
-**命令行**
+### 4. 上传知识库文档
+
 ```bash
-# 上传文档
 curl -X POST http://localhost:9900/api/upload \
   -F "file=@document.txt"
-
-# 智能问答
-curl -X POST http://localhost:9900/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{"Id":"test","Question":"什么是向量数据库？"}'
-
-# 健康检查
-curl http://localhost:9900/milvus/health
 ```
 
+
+## 本地联调建议
+
+### Prometheus
+
+如果本地没有真实 Prometheus，建议在 `application.yml` 中先启用 mock：
+
+```yaml
+prometheus:
+  mock-enabled: true
+```
+
+### 日志查询
+
+当前项目支持通过腾讯云 MCP 接入日志工具；如果本地不准备联调真实日志平台，也建议保留 mock / 占位方式进行验证。
+
+### 向量化上传
+
+当前上传接口会同步执行文档切片与向量化，因此在网络较慢时可能出现等待较久或 embedding 超时的情况。这也是后续计划优化的重点之一。
+
+
+## 当前适合的使用场景
+
+- 本地验证 Agent + RAG 基本链路
+- 演示文档知识检索与智能问答
+- 验证 AIOps 报告生成流程
+- 作为后续重构和工程化改造的基础仓库
+
+
+## 后续计划
+
+当前项目正在逐步重构，重点方向包括：
+
+- 统一 DTO、响应结构与异常处理
+- 拆分控制器与会话管理
+- 统一 Prompt 管理
+- 优化上传后同步向量化的流程
+- 将 mock 与真实外部依赖进一步解耦
+
+详细说明可参考：
+
+- [REFACTOR_PLAN.md](/Users/yuxinfeng/code/Agent/SuperBizAgent-release/REFACTOR_PLAN.md:1)
+
+
+## 备注
+
+这个项目当前更偏向“可运行的实验性工程骨架”，适合边跑通、边梳理、边重构，而不是一次性追求完整生产化。对外发布时，建议进一步补充：
+
+- 更稳定的配置分层
+- 更清晰的 mock / dev / prod 区分
+- 更完整的测试
+- 更合理的异步任务与状态管理
