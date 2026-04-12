@@ -137,6 +137,9 @@ document:
 
 ```bash
 export DASHSCOPE_API_KEY=your-api-key
+export TENCENT_MCP_SSE_ENDPOINT=/sse/your-private-endpoint
+# 可选，默认就是 https://mcp-api.tencent-cloud.com
+export TENCENT_MCP_BASE_URL=https://mcp-api.tencent-cloud.com
 ```
 
 

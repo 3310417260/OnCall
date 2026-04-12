@@ -414,17 +414,15 @@ src/main/java/org/example/
 
 - DashScope API Key 通过 macOS shell 环境变量提供
 - 环境变量名为 `DASHSCOPE_API_KEY`
-- 腾讯云 MCP SSE 地址为：
-
-```text
-https://mcp-api.tencent-cloud.com/sse/76d15916126e3b60
-```
+- 腾讯云 MCP 使用 SSE 连接
+- public 仓库中不保留具体 SSE endpoint，改为本地环境变量配置
 
 说明：
 
 - 后续代码改造时，应优先继续使用环境变量 `DASHSCOPE_API_KEY`
-- 后续接入 MCP 时，应将上述 SSE 地址作为已确认的目标连接地址
-- 在正式改造配置前，不先假设还有额外鉴权头或额外路径参数，若后续需要再补充
+- 后续接入 MCP 时，SSE endpoint 应通过 `TENCENT_MCP_SSE_ENDPOINT` 注入
+- MCP base URL 可通过 `TENCENT_MCP_BASE_URL` 配置，默认值为 `https://mcp-api.tencent-cloud.com`
+- 若后续还需要额外鉴权头或额外参数，再补充到本地配置中
 
 ### 9.1 DashScope / LLM 相关
 
