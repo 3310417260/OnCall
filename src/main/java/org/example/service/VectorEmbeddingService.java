@@ -17,6 +17,7 @@ import jakarta.annotation.PostConstruct;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * 向量嵌入服务
@@ -32,6 +33,18 @@ public class VectorEmbeddingService {
 
     @Value("${dashscope.embedding.model}")
     private String model;
+
+    @Value("${dashscope.embedding.max-attempts:3}")
+    private int maxAttempts;
+
+    @Value("${dashscope.embedding.retry-interval-ms:2000}")
+    private long retryIntervalMs;
+
+    @Value("${dashscope.embedding.max-retry-interval-ms:10000}")
+    private long maxRetryIntervalMs;
+
+    @Value("${dashscope.embedding.retry-multiplier:2.0}")
+    private double retryMultiplier;
 
     private TextEmbedding textEmbedding;
 
@@ -63,7 +76,7 @@ public class VectorEmbeddingService {
         // 创建 TextEmbedding 实例
         textEmbedding = new TextEmbedding();
         
-        logger.info("阿里云 DashScope Embedding 服务初始化完成，模型: {}", model);
+        logger.info("阿里云 DashScope Embedding 服务初始化完成，模型: {}, 最大重试次数: {}", model, maxAttempts);
     }
 
     /**
@@ -98,8 +111,11 @@ public class VectorEmbeddingService {
                     .texts(Collections.singletonList(content))
                     .build();
 
-            // 调用 API
-            TextEmbeddingResult result = textEmbedding.call(param);
+            TextEmbeddingResult result = executeWithRetry(
+                    "单文本向量生成",
+                    String.format("内容长度=%d", content.length()),
+                    () -> textEmbedding.call(param)
+            );
 
             // 检查结果
             List<Float> floatEmbedding = getFloats(result);
@@ -113,8 +129,11 @@ public class VectorEmbeddingService {
             logger.error("API Key 未设置或无效", e);
             throw new RuntimeException("API Key 未设置，请配置 dashscope.api.key", e);
         } catch (Exception e) {
+            if (e instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
             logger.error("生成向量嵌入失败, 内容长度: {}", content != null ? content.length() : 0, e);
-            throw new RuntimeException("生成向量嵌入失败: " + e.getMessage(), e);
+            throw buildEmbeddingException("单文本向量生成", content != null ? "内容长度=" + content.length() : "内容为空", e);
         }
     }
 
@@ -170,8 +189,11 @@ public class VectorEmbeddingService {
                     .texts(contents)
                     .build();
 
-            // 调用 API
-            TextEmbeddingResult result = textEmbedding.call(param);
+            TextEmbeddingResult result = executeWithRetry(
+                    "批量向量生成",
+                    String.format("批量数量=%d", contents.size()),
+                    () -> textEmbedding.call(param)
+            );
 
             // 检查结果
             if (result == null || result.getOutput() == null || result.getOutput().getEmbeddings() == null) {
@@ -205,8 +227,11 @@ public class VectorEmbeddingService {
             logger.error("批量调用时 API Key 未设置或无效", e);
             throw new RuntimeException("API Key 未设置，请配置 dashscope.api.key", e);
         } catch (Exception e) {
+            if (e instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
             logger.error("批量生成向量嵌入失败", e);
-            throw new RuntimeException("批量生成向量嵌入失败: " + e.getMessage(), e);
+            throw buildEmbeddingException("批量向量生成", contents != null ? "批量数量=" + contents.size() : "内容列表为空", e);
         }
     }
 
@@ -243,5 +268,128 @@ public class VectorEmbeddingService {
         }
 
         return dotProduct / (float) (Math.sqrt(norm1) * Math.sqrt(norm2));
+    }
+
+    private TextEmbeddingResult executeWithRetry(String operation, String context, EmbeddingCall call) throws Exception {
+        Exception lastException = null;
+        long currentDelayMs = retryIntervalMs;
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                return call.call();
+            } catch (NoApiKeyException e) {
+                throw e;
+            } catch (Exception e) {
+                lastException = e;
+                boolean retryable = isRetryableException(e);
+                String conciseMessage = extractConciseMessage(e);
+
+                if (!retryable || attempt >= maxAttempts) {
+                    logger.error("{}失败，{}，第 {}/{} 次尝试，错误: {}",
+                            operation, context, attempt, maxAttempts, conciseMessage, e);
+                    break;
+                }
+
+                logger.warn("{}失败，{}，第 {}/{} 次尝试，准备在 {} ms 后重试。错误: {}",
+                        operation, context, attempt, maxAttempts, currentDelayMs, conciseMessage);
+
+                sleepBeforeRetry(currentDelayMs);
+                currentDelayMs = nextDelay(currentDelayMs);
+            }
+        }
+
+        if (lastException == null) {
+            throw new IllegalStateException(operation + "失败，但未捕获到底层异常");
+        }
+
+        throw buildEmbeddingException(operation, context, lastException);
+    }
+
+    private RuntimeException buildEmbeddingException(String operation, String context, Exception exception) {
+        String conciseMessage = extractConciseMessage(exception);
+        String userMessage;
+
+        if (isRetryableException(exception)) {
+            userMessage = String.format(
+                    "%s失败，已重试 %d 次仍未成功。当前更像是 DashScope 网络超时或服务暂时不可用，请稍后重试。上下文: %s。原始错误: %s",
+                    operation,
+                    maxAttempts,
+                    context,
+                    conciseMessage
+            );
+        } else {
+            userMessage = String.format(
+                    "%s失败。请检查 DashScope 配置或请求内容。上下文: %s。原始错误: %s",
+                    operation,
+                    context,
+                    conciseMessage
+            );
+        }
+
+        return new RuntimeException(userMessage, exception);
+    }
+
+    private boolean isRetryableException(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            String className = current.getClass().getSimpleName().toLowerCase(Locale.ROOT);
+            String message = current.getMessage();
+            if (className.contains("sockettimeoutexception")
+                    || className.contains("connectexception")
+                    || className.contains("timeoutexception")) {
+                return true;
+            }
+            if (message != null) {
+                String normalized = message.toLowerCase(Locale.ROOT);
+                if (normalized.contains("timed out")
+                        || normalized.contains("timeout")
+                        || normalized.contains("deadline exceeded")
+                        || normalized.contains("network error")
+                        || normalized.contains("connectexception")
+                        || normalized.contains("connection reset")
+                        || normalized.contains("temporarily unavailable")
+                        || normalized.contains("503")
+                        || normalized.contains("429")) {
+                    return true;
+                }
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private String extractConciseMessage(Throwable throwable) {
+        Throwable root = throwable;
+        while (root.getCause() != null) {
+            root = root.getCause();
+        }
+
+        String message = root.getMessage();
+        if (message == null || message.isBlank()) {
+            message = throwable.getMessage();
+        }
+        if (message == null || message.isBlank()) {
+            message = throwable.getClass().getSimpleName();
+        }
+        return message;
+    }
+
+    private void sleepBeforeRetry(long delayMs) {
+        try {
+            Thread.sleep(delayMs);
+        } catch (InterruptedException interruptedException) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("等待 DashScope 重试时被中断", interruptedException);
+        }
+    }
+
+    private long nextDelay(long currentDelayMs) {
+        long nextDelayMs = (long) Math.ceil(currentDelayMs * retryMultiplier);
+        return Math.min(nextDelayMs, maxRetryIntervalMs);
+    }
+
+    @FunctionalInterface
+    private interface EmbeddingCall {
+        TextEmbeddingResult call() throws Exception;
     }
 }

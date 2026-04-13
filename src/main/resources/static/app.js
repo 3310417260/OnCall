@@ -1069,8 +1069,9 @@ class SuperBizAgentApp {
             const data = await response.json();
 
             if ((data.code === 200 || data.message === 'success') && data.data) {
-                // 在聊天界面显示上传成功消息
-                const successMessage = `${file.name} 上传到知识库成功`;
+                const taskId = data.data.taskId;
+                const status = data.data.indexStatus || 'PENDING';
+                const successMessage = `${file.name} 上传成功，后台索引任务已创建（状态: ${status}${taskId ? `，任务ID: ${taskId}` : ''}）`;
                 this.addMessage('assistant', successMessage, false, true);
             } else {
                 throw new Error(data.message || '上传失败');

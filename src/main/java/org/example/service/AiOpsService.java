@@ -71,7 +71,7 @@ public class AiOpsService {
                 .subAgents(List.of(plannerAgent, executorAgent))
                 .build();
 
-        String taskPrompt = "你是企业级 SRE，接到了自动化告警排查任务。请结合工具调用，执行**规划→执行→再规划**的闭环，并最终按照固定模板输出《告警分析报告》。禁止编造虚假数据，如连续多次查询失败需诚实反馈无法完成的原因。";
+        String taskPrompt = aiOpsPromptService.buildTaskPrompt();
 
         logger.info("调用 Supervisor Agent 开始编排...");
         return supervisorAgent.invoke(taskPrompt);

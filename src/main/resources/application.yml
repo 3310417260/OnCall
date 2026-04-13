@@ -55,6 +55,10 @@ dashscope:
     key: ${DASHSCOPE_API_KEY}  # 从环境变量读取或使用默认值（用于自定义配置）
   embedding:
     model: text-embedding-v4  # 阿里云文本向量化模型
+    max-attempts: 3
+    retry-interval-ms: 2000
+    max-retry-interval-ms: 10000
+    retry-multiplier: 2.0
 
 # 文档分片配置
 document:

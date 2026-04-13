@@ -2,12 +2,15 @@ package org.example.controller;
 
 import org.example.config.FileUploadConfig;
 import org.example.dto.FileUploadRes;
+import org.example.dto.IndexTaskResponse;
 import org.example.response.ApiResponse;
-import org.example.service.VectorIndexService;
+import org.example.service.DocumentIndexTaskService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -26,11 +29,11 @@ public class FileUploadController {
     private static final Logger logger = LoggerFactory.getLogger(FileUploadController.class);
 
     private final FileUploadConfig fileUploadConfig;
-    private final VectorIndexService vectorIndexService;
+    private final DocumentIndexTaskService documentIndexTaskService;
 
-    public FileUploadController(FileUploadConfig fileUploadConfig, VectorIndexService vectorIndexService) {
+    public FileUploadController(FileUploadConfig fileUploadConfig, DocumentIndexTaskService documentIndexTaskService) {
         this.fileUploadConfig = fileUploadConfig;
-        this.vectorIndexService = vectorIndexService;
+        this.documentIndexTaskService = documentIndexTaskService;
     }
 
     @PostMapping(value = "/api/upload", consumes = "multipart/form-data")
@@ -70,29 +73,32 @@ public class FileUploadController {
 
             logger.info("文件上传成功: {}", filePath);
 
-            // 文件上传成功后，自动调用向量索引服务
-            try {
-                logger.info("开始为上传文件创建向量索引: {}", filePath);
-                vectorIndexService.indexSingleFile(filePath.toString());
-                logger.info("向量索引创建成功: {}", filePath);
-            } catch (Exception e) {
-                logger.error("向量索引创建失败: {}, 错误: {}", filePath, e.getMessage(), e);
-                // 注意：即使索引失败，文件上传仍然成功，只是记录错误日志
-                // 可以根据业务需求决定是否要删除文件或返回错误
-            }
+            IndexTaskResponse task = documentIndexTaskService.submitTask(originalFilename, filePath.toString());
+            logger.info("已创建后台索引任务: taskId={}, file={}", task.getTaskId(), filePath);
 
             FileUploadRes response = new FileUploadRes(
                     originalFilename,
                     filePath.toString(),
-                    file.getSize()
+                    file.getSize(),
+                    task.getTaskId(),
+                    task.getStatus(),
+                    task.getMessage()
             );
 
-            return ResponseEntity.ok(ApiResponse.success(response));
+            return ResponseEntity.status(HttpStatus.ACCEPTED).body(ApiResponse.success(response));
 
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ApiResponse.<String>error("文件上传失败: " + e.getMessage()));
         }
+    }
+
+    @GetMapping("/api/upload/tasks/{taskId}")
+    public ResponseEntity<ApiResponse<IndexTaskResponse>> getTaskStatus(@PathVariable String taskId) {
+        return documentIndexTaskService.getTask(taskId)
+                .map(task -> ResponseEntity.ok(ApiResponse.success(task)))
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(ApiResponse.<IndexTaskResponse>error("索引任务不存在")));
     }
 
     private String getFileExtension(String filename) {
