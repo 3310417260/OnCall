@@ -5,21 +5,14 @@ import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatModel;
 import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatOptions;
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
-import org.example.agent.tool.DateTimeTools;
-import org.example.agent.tool.InternalDocsTools;
-import org.example.agent.tool.QueryLogsTools;
-import org.example.agent.tool.QueryMetricsTools;
 import org.example.prompt.ChatPromptService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.ai.tool.ToolCallback;
-import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * 聊天服务
@@ -30,29 +23,20 @@ public class ChatService {
 
     private static final Logger logger = LoggerFactory.getLogger(ChatService.class);
 
-    private final InternalDocsTools internalDocsTools;
-    private final DateTimeTools dateTimeTools;
-    private final QueryMetricsTools queryMetricsTools;
-    private final QueryLogsTools queryLogsTools;
-    private final ToolCallbackProvider tools;
+    private final AgentFactory agentFactory;
+    private final AgentToolRegistry agentToolRegistry;
     private final ChatPromptService chatPromptService;
-
-    @Value("${spring.ai.dashscope.api-key}")
     private String dashScopeApiKey;
 
     public ChatService(
-            InternalDocsTools internalDocsTools,
-            DateTimeTools dateTimeTools,
-            QueryMetricsTools queryMetricsTools,
-            ToolCallbackProvider tools,
+            AgentFactory agentFactory,
+            AgentToolRegistry agentToolRegistry,
             ChatPromptService chatPromptService,
-            Optional<QueryLogsTools> queryLogsTools) {
-        this.internalDocsTools = internalDocsTools;
-        this.dateTimeTools = dateTimeTools;
-        this.queryMetricsTools = queryMetricsTools;
-        this.tools = tools;
+            @Value("${spring.ai.dashscope.api-key}") String dashScopeApiKey) {
+        this.agentFactory = agentFactory;
+        this.agentToolRegistry = agentToolRegistry;
         this.chatPromptService = chatPromptService;
-        this.queryLogsTools = queryLogsTools.orElse(null);
+        this.dashScopeApiKey = dashScopeApiKey;
     }
 
     /**
@@ -99,35 +83,10 @@ public class ChatService {
     }
 
     /**
-     * 动态构建方法工具数组
-     * 根据 cls.mock-enabled 决定是否包含 QueryLogsTools
-     */
-    public Object[] buildMethodToolsArray() {
-        if (queryLogsTools != null) {
-            // Mock 模式：包含 QueryLogsTools
-            return new Object[]{dateTimeTools, internalDocsTools, queryMetricsTools, queryLogsTools};
-        } else {
-            // 真实模式：不包含 QueryLogsTools（由 MCP 提供日志查询功能）
-            return new Object[]{dateTimeTools, internalDocsTools, queryMetricsTools};
-        }
-    }
-
-    /**
-     * 获取工具回调列表，mcp服务提供的工具
-     */
-    public ToolCallback[] getToolCallbacks() {
-        return tools.getToolCallbacks();
-    }
-
-    /**
      * 记录可用工具列表：mcp服务提供的工具
      */
     public void logAvailableTools() {
-        ToolCallback[] toolCallbacks = tools.getToolCallbacks();
-        logger.info("可用工具列表:");
-        for (ToolCallback toolCallback : toolCallbacks) {
-            logger.info(">>> {}", toolCallback.getToolDefinition().name());
-        }
+        agentToolRegistry.logAvailableTools(logger);
     }
 
     /**
@@ -137,13 +96,7 @@ public class ChatService {
      * @return 配置好的 ReactAgent
      */
     public ReactAgent createReactAgent(DashScopeChatModel chatModel, String systemPrompt) {
-        return ReactAgent.builder()
-                .name("intelligent_assistant")
-                .model(chatModel)
-                .systemPrompt(systemPrompt)
-                .methodTools(buildMethodToolsArray())
-                .tools(getToolCallbacks())
-                .build();
+        return agentFactory.createChatAgent(chatModel, systemPrompt);
     }
 
     /**

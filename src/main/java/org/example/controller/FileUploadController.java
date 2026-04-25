@@ -3,6 +3,7 @@ package org.example.controller;
 import org.example.config.FileUploadConfig;
 import org.example.dto.FileUploadRes;
 import org.example.dto.IndexTaskResponse;
+import org.example.exception.ApiException;
 import org.example.response.ApiResponse;
 import org.example.service.DocumentIndexTaskService;
 import org.slf4j.Logger;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -39,18 +41,17 @@ public class FileUploadController {
     @PostMapping(value = "/api/upload", consumes = "multipart/form-data")
     public ResponseEntity<?> upload(@RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) {
-            return ResponseEntity.badRequest().body("文件不能为空");
+            throw ApiException.badRequest("文件不能为空");
         }
 
         String originalFilename = file.getOriginalFilename();
         if (originalFilename == null || originalFilename.isEmpty()) {
-            return ResponseEntity.badRequest().body("文件名不能为空");
+            throw ApiException.badRequest("文件名不能为空");
         }
 
         String fileExtension = getFileExtension(originalFilename);
         if (!isAllowedExtension(fileExtension)) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body("不支持的文件格式，仅支持: " + fileUploadConfig.getAllowedExtensions());
+            throw ApiException.badRequest("不支持的文件格式，仅支持: " + fileUploadConfig.getAllowedExtensions());
         }
 
         try {
@@ -88,17 +89,15 @@ public class FileUploadController {
             return ResponseEntity.status(HttpStatus.ACCEPTED).body(ApiResponse.success(response));
 
         } catch (IOException e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.<String>error("文件上传失败: " + e.getMessage()));
+            throw new UncheckedIOException("文件上传失败: " + e.getMessage(), e);
         }
     }
 
     @GetMapping("/api/upload/tasks/{taskId}")
     public ResponseEntity<ApiResponse<IndexTaskResponse>> getTaskStatus(@PathVariable String taskId) {
-        return documentIndexTaskService.getTask(taskId)
-                .map(task -> ResponseEntity.ok(ApiResponse.success(task)))
-                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(ApiResponse.<IndexTaskResponse>error("索引任务不存在")));
+        IndexTaskResponse task = documentIndexTaskService.getTask(taskId)
+                .orElseThrow(() -> ApiException.notFound("索引任务不存在"));
+        return ResponseEntity.ok(ApiResponse.success(task));
     }
 
     private String getFileExtension(String filename) {

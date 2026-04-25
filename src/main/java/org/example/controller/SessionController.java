@@ -2,6 +2,7 @@ package org.example.controller;
 
 import org.example.dto.ClearSessionRequest;
 import org.example.dto.SessionInfoResponse;
+import org.example.exception.ApiException;
 import org.example.response.ApiResponse;
 import org.example.service.SessionService;
 import org.slf4j.Logger;
@@ -30,34 +31,25 @@ public class SessionController {
 
     @PostMapping("/clear")
     public ResponseEntity<ApiResponse<String>> clearChatHistory(@RequestBody ClearSessionRequest request) {
-        try {
-            logger.info("收到清空会话历史请求 - SessionId: {}", request.getId());
+        logger.info("收到清空会话历史请求 - SessionId: {}", request.getId());
 
-            if (request.getId() == null || request.getId().isEmpty()) {
-                return ResponseEntity.ok(ApiResponse.<String>error("会话ID不能为空"));
-            }
-
-            if (sessionService.clearSession(request.getId())) {
-                return ResponseEntity.ok(ApiResponse.success("会话历史已清空"));
-            }
-            return ResponseEntity.ok(ApiResponse.<String>error("会话不存在"));
-        } catch (Exception e) {
-            logger.error("清空会话历史失败", e);
-            return ResponseEntity.ok(ApiResponse.<String>error(e.getMessage()));
+        if (request.getId() == null || request.getId().isEmpty()) {
+            throw ApiException.badRequest("会话ID不能为空");
         }
+
+        if (sessionService.clearSession(request.getId())) {
+            return ResponseEntity.ok(ApiResponse.success("会话历史已清空"));
+        }
+
+        throw ApiException.notFound("会话不存在");
     }
 
     @GetMapping("/session/{sessionId}")
     public ResponseEntity<ApiResponse<SessionInfoResponse>> getSessionInfo(@PathVariable String sessionId) {
-        try {
-            Optional<SessionInfoResponse> response = sessionService.getSessionInfo(sessionId);
-            if (response.isPresent()) {
-                return ResponseEntity.ok(ApiResponse.success(response.get()));
-            }
-            return ResponseEntity.ok(ApiResponse.<SessionInfoResponse>error("会话不存在"));
-        } catch (Exception e) {
-            logger.error("获取会话信息失败", e);
-            return ResponseEntity.ok(ApiResponse.<SessionInfoResponse>error(e.getMessage()));
+        Optional<SessionInfoResponse> response = sessionService.getSessionInfo(sessionId);
+        if (response.isPresent()) {
+            return ResponseEntity.ok(ApiResponse.success(response.get()));
         }
+        throw ApiException.notFound("会话不存在");
     }
 }

@@ -617,7 +617,7 @@ class SuperBizAgentApp {
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP错误: ${response.status}`);
+                throw new Error(await this.extractResponseError(response));
             }
 
             const data = await response.json();
@@ -673,7 +673,7 @@ class SuperBizAgentApp {
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP错误: ${response.status}`);
+                throw new Error(await this.extractResponseError(response));
             }
             
             // 创建助手消息元素
@@ -1063,7 +1063,7 @@ class SuperBizAgentApp {
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP错误: ${response.status}`);
+                throw new Error(await this.extractResponseError(response));
             }
 
             const data = await response.json();
@@ -1073,6 +1073,12 @@ class SuperBizAgentApp {
                 const status = data.data.indexStatus || 'PENDING';
                 const successMessage = `${file.name} 上传成功，后台索引任务已创建（状态: ${status}${taskId ? `，任务ID: ${taskId}` : ''}）`;
                 this.addMessage('assistant', successMessage, false, true);
+
+                if (taskId) {
+                    this.pollIndexTaskStatus(taskId, file.name).catch(error => {
+                        console.error('轮询索引任务状态失败:', error);
+                    });
+                }
             } else {
                 throw new Error(data.message || '上传失败');
             }
@@ -1089,6 +1095,63 @@ class SuperBizAgentApp {
             this.showUploadOverlay(false);
             this.updateUI();
         }
+    }
+
+    async pollIndexTaskStatus(taskId, fileName) {
+        const maxAttempts = 120;
+        const intervalMs = 3000;
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            await this.delay(intervalMs);
+
+            const response = await fetch(`${this.apiBaseUrl}/upload/tasks/${taskId}`);
+            if (!response.ok) {
+                throw new Error(await this.extractResponseError(response, '查询索引任务失败'));
+            }
+
+            const data = await response.json();
+            if (!(data.code === 200 || data.message === 'success') || !data.data) {
+                throw new Error(data.message || '索引任务状态返回异常');
+            }
+
+            const task = data.data;
+            const status = task.status || 'UNKNOWN';
+
+            if (status === 'SUCCEEDED') {
+                const message = `${fileName} 已完成知识库索引，可以开始用于检索问答。`;
+                this.addMessage('assistant', message, false, true);
+                this.showNotification(`${fileName} 索引完成`, 'success');
+                return;
+            }
+
+            if (status === 'FAILED') {
+                const errorMessage = task.errorMessage || task.message || '未知错误';
+                const message = `${fileName} 索引失败：${errorMessage}`;
+                this.addMessage('assistant', message, false, true);
+                this.showNotification(`${fileName} 索引失败`, 'error');
+                return;
+            }
+        }
+
+        const timeoutMessage = `${fileName} 仍在后台索引中，你可以稍后再查看结果。任务ID: ${taskId}`;
+        this.addMessage('assistant', timeoutMessage, false, true);
+    }
+
+    delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async extractResponseError(response, fallbackPrefix = '请求失败') {
+        try {
+            const data = await response.json();
+            if (data && data.message && data.message !== 'success') {
+                return data.message;
+            }
+        } catch (error) {
+            console.warn('解析错误响应失败:', error);
+        }
+
+        return `${fallbackPrefix}: HTTP ${response.status}`;
     }
 
     // 格式化文件大小
@@ -1111,7 +1174,7 @@ class SuperBizAgentApp {
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP错误: ${response.status}`);
+                throw new Error(await this.extractResponseError(response));
             }
 
             let fullResponse = '';

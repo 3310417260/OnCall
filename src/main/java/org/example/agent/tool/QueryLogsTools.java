@@ -159,7 +159,7 @@ public class QueryLogsTools {
             "query (optional, defaults to a curated search if empty), " +
             "limit (optional, default 20, max 100).")
     public String queryLogs(
-            @ToolParam(description = "地域，可选值: ap-guangzhou, ap-shanghai, ap-beijing, ap-chengdu。默认 ap-guangzhou") String region,
+            @ToolParam(description = "地域，可选值: ap-guangzhou, ap-shanghai, ap-beijing, ap-chengdu。默认 ap-shanghai") String region,
             @ToolParam(description = "日志主题，如 system-metrics, application-logs, database-slow-query, system-events，也支持 CLS TopicId") String logTopic,
             @ToolParam(description = "查询条件，支持 Lucene 语法，如 level:ERROR OR cpu_usage:>80；为空时返回该主题近 5 条核心日志") String query,
             @ToolParam(description = "返回日志条数，默认20，最大100") Integer limit) {

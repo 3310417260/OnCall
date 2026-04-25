@@ -2,15 +2,12 @@ package org.example.controller;
 
 import com.alibaba.cloud.ai.dashscope.api.DashScopeApi;
 import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatModel;
-import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatOptions;
 import com.alibaba.cloud.ai.graph.OverAllState;
 import org.example.dto.SseMessage;
 import org.example.service.AiOpsService;
 import org.example.service.ChatService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.ai.tool.ToolCallback;
-import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -30,13 +27,11 @@ public class AiOpsController {
 
     private final AiOpsService aiOpsService;
     private final ChatService chatService;
-    private final ToolCallbackProvider tools;
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
-    public AiOpsController(AiOpsService aiOpsService, ChatService chatService, ToolCallbackProvider tools) {
+    public AiOpsController(AiOpsService aiOpsService, ChatService chatService) {
         this.aiOpsService = aiOpsService;
         this.chatService = chatService;
-        this.tools = tools;
     }
 
     @PostMapping(value = "/ai_ops", produces = "text/event-stream;charset=UTF-8")
@@ -46,20 +41,10 @@ public class AiOpsController {
         executor.execute(() -> {
             try {
                 DashScopeApi dashScopeApi = chatService.createDashScopeApi();
-                DashScopeChatModel chatModel = DashScopeChatModel.builder()
-                        .dashScopeApi(dashScopeApi)
-                        .defaultOptions(DashScopeChatOptions.builder()
-                                .withModel(DashScopeChatModel.DEFAULT_MODEL_NAME)
-                                .withTemperature(0.3)
-                                .withMaxToken(8000)
-                                .withTopP(0.9)
-                                .build())
-                        .build();
-
-                ToolCallback[] toolCallbacks = tools.getToolCallbacks();
+                DashScopeChatModel chatModel = chatService.createChatModel(dashScopeApi, 0.3, 8000, 0.9);
                 emitter.send(SseEmitter.event().name("message").data(SseMessage.content("正在读取告警并拆解任务...\n")));
 
-                Optional<OverAllState> overAllStateOptional = aiOpsService.executeAiOpsAnalysis(chatModel, toolCallbacks);
+                Optional<OverAllState> overAllStateOptional = aiOpsService.executeAiOpsAnalysis(chatModel);
                 if (overAllStateOptional.isEmpty()) {
                     emitter.send(SseEmitter.event().name("message")
                             .data(SseMessage.error("多 Agent 编排未获取到有效结果"), MediaType.APPLICATION_JSON));

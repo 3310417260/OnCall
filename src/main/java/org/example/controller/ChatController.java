@@ -9,6 +9,7 @@ import com.alibaba.cloud.ai.graph.streaming.StreamingOutput;
 import org.example.dto.ChatRequest;
 import org.example.dto.ChatResponse;
 import org.example.dto.SseMessage;
+import org.example.exception.ApiException;
 import org.example.response.ApiResponse;
 import org.example.service.ChatService;
 import org.example.service.SessionService;
@@ -43,28 +44,23 @@ public class ChatController {
     }
 
     @PostMapping("/chat")
-    public ResponseEntity<ApiResponse<ChatResponse>> chat(@RequestBody ChatRequest request) {
-        try {
-            logger.info("收到对话请求 - SessionId: {}, Question: {}", request.getId(), request.getQuestion());
+    public ResponseEntity<ApiResponse<ChatResponse>> chat(@RequestBody ChatRequest request) throws Exception {
+        logger.info("收到对话请求 - SessionId: {}, Question: {}", request.getId(), request.getQuestion());
 
-            if (request.getQuestion() == null || request.getQuestion().trim().isEmpty()) {
-                return ResponseEntity.ok(ApiResponse.success(ChatResponse.error("问题内容不能为空")));
-            }
-
-            SessionService.SessionSnapshot session = sessionService.getOrCreateSession(request.getId());
-            DashScopeApi dashScopeApi = chatService.createDashScopeApi();
-            DashScopeChatModel chatModel = chatService.createStandardChatModel(dashScopeApi);
-
-            chatService.logAvailableTools();
-            ReactAgent agent = chatService.createReactAgent(chatModel, chatService.buildSystemPrompt(session.history()));
-            String fullAnswer = chatService.executeChat(agent, request.getQuestion());
-
-            sessionService.addExchange(session.sessionId(), request.getQuestion(), fullAnswer);
-            return ResponseEntity.ok(ApiResponse.success(ChatResponse.success(fullAnswer)));
-        } catch (Exception e) {
-            logger.error("对话失败", e);
-            return ResponseEntity.ok(ApiResponse.success(ChatResponse.error(e.getMessage())));
+        if (request.getQuestion() == null || request.getQuestion().trim().isEmpty()) {
+            throw ApiException.badRequest("问题内容不能为空");
         }
+
+        SessionService.SessionSnapshot session = sessionService.getOrCreateSession(request.getId());
+        DashScopeApi dashScopeApi = chatService.createDashScopeApi();
+        DashScopeChatModel chatModel = chatService.createStandardChatModel(dashScopeApi);
+
+        chatService.logAvailableTools();
+        ReactAgent agent = chatService.createReactAgent(chatModel, chatService.buildSystemPrompt(session.history()));
+        String fullAnswer = chatService.executeChat(agent, request.getQuestion());
+
+        sessionService.addExchange(session.sessionId(), request.getQuestion(), fullAnswer);
+        return ResponseEntity.ok(ApiResponse.success(ChatResponse.success(fullAnswer)));
     }
 
     @PostMapping(value = "/chat_stream", produces = "text/event-stream;charset=UTF-8")
