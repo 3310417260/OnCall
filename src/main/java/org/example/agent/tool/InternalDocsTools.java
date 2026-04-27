@@ -1,7 +1,8 @@
 package org.example.agent.tool;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.example.service.VectorSearchService;
+import org.example.dto.RetrievedChunk;
+import org.example.service.KnowledgeRetrievalService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.tool.annotation.Tool;
@@ -24,7 +25,7 @@ public class InternalDocsTools {
     /** 工具名常量，用于动态构建提示词 */
     public static final String TOOL_QUERY_INTERNAL_DOCS = "queryInternalDocs";
     
-    private final VectorSearchService vectorSearchService;
+    private final KnowledgeRetrievalService knowledgeRetrievalService;
     
     @Value("${rag.top-k:3}")
     private int topK = 3; // 默认值
@@ -33,11 +34,11 @@ public class InternalDocsTools {
     
     /**
      * 构造函数注入依赖
-     * Spring 会自动注入 VectorSearchService
+     * Spring 会自动注入 KnowledgeRetrievalService
      */
     @Autowired
-    public InternalDocsTools(VectorSearchService vectorSearchService) {
-        this.vectorSearchService = vectorSearchService;
+    public InternalDocsTools(KnowledgeRetrievalService knowledgeRetrievalService) {
+        this.knowledgeRetrievalService = knowledgeRetrievalService;
     }
     
     /**
@@ -57,8 +58,8 @@ public class InternalDocsTools {
 
         try {
             // 使用向量搜索服务检索相关文档
-            List<VectorSearchService.SearchResult> searchResults = 
-                    vectorSearchService.searchSimilarDocuments(query, topK);
+            List<RetrievedChunk> searchResults =
+                    knowledgeRetrievalService.retrieve(query, topK);
             
             if (searchResults.isEmpty()) {
                 return "{\"status\": \"no_results\", \"message\": \"No relevant documents found in the knowledge base.\"}";

@@ -344,7 +344,18 @@ Controller
 - 明确 `RagService` 是保留为备用链路，还是正式退出主路径
 - 统一检索结果对象
 - 增加引用信息，便于回答时带出处
-- 视情况加入 rerank、去重和检索质量评估
+- 第一阶段规则型 rerank 已落地：
+  - 新增 `KnowledgeRetrievalService`
+  - 使用 `RecallCandidate / RetrievedChunk` 统一召回与最终结果对象
+  - 在服务层基于 `content + metadata(_source/_file_name/title/chunkIndex/totalChunks)` 做重排
+  - 增加同源 chunk 惩罚与单来源保留上限
+  - 当前默认仍关闭 `rag.rerank.enabled=false`，用于兼容旧链路并便于灰度联调
+- 下一阶段继续补：
+  - 检索 trace 与失败 case 诊断
+  - 权重调优与阈值调优
+  - 模型型 rerank provider
+  - 更稳定的中文关键词策略
+  - 检索质量评估与 trace
 
 预期收益：
 
@@ -449,6 +460,81 @@ Controller
   - tool 调用链路
   - AIOps workflow 基本成功率
   - 检索质量回归
+
+#### 目标 10：交叉验证与置信度治理
+
+当前项目已经开始具备 verifier 雏形，但还没有形成独立的 confidence / cross-check 层。
+
+建议动作：
+
+- 增加 `AnswerConfidenceService` 或 `RetrievalVerificationService`
+- 对以下信号做统一打分：
+  - 检索质量
+    - top1/top3 分数稳定性
+    - 标题/文件名命中情况
+    - 多个 chunk 是否支撑同一主题
+  - 证据一致性
+    - 知识库、Prometheus、日志是否相互印证
+    - `ExecutorFeedback.status` 与证据内容是否一致
+  - 输出质量
+    - 最终回答/报告是否带出处
+    - 是否存在明显超出证据的强结论
+- 输出 `HIGH / MEDIUM / LOW` 级别置信度
+- 在低置信度场景下触发降级策略：
+  - 提示“当前证据不足”
+  - 建议人工复核
+  - 触发二次检索或 query rewrite
+
+预期收益：
+
+- 让系统不仅“给答案”，还知道“答案有多可信”
+- 减少检索偏差被直接放大成错误结论
+- 为后续 answer verification 和多证据校验打基础
+
+#### 目标 11：多轮对话上下文压缩与记忆分层
+
+当前聊天上下文仍是简单滑动窗口：`SessionService` 保留最近 6 轮问答，并由 `ChatPromptBuilder` 直接把历史拼进 system prompt，还没有单独的摘要压缩层。
+
+建议动作：
+
+- 短期：
+  - 保持滑动窗口，但增加 token/字符预算感知
+  - 当历史超限时，不只是截断，而是先提取最近关键问答摘要
+- 参考分级上下文治理策略，逐步引入以下层级：
+  - 第一层：旧对话只保留任务框架
+    - 用户目标
+    - 已确认事实
+    - 已执行动作
+    - 当前待解决问题
+  - 第二层：工具执行结果卸载
+    - 不保留完整日志/完整检索结果
+    - 只保留工具名、关键结论、证据摘要和引用
+  - 第三层：上下文折叠
+    - 最近几轮保留 raw messages
+    - 更早对话转为 folded / summarized memory
+  - 第四层：接近上下文窗口上限时触发全文压缩
+    - 根据 token/字符预算压缩整段历史
+    - 不再只按固定轮数裁剪
+  - 第五层：紧急保护
+    - 当上下文过长导致无法安全继续时，强制执行 emergency compression
+    - 必要时向上层返回“上下文已自动压缩/需重新聚焦问题”的信号
+- 中期：
+  - 增加 `ConversationSummaryService`
+  - 让旧历史压缩成 summary memory，近期历史保留 raw memory
+  - 形成：
+    - short-term memory：最近几轮原始对话
+    - summary memory：较早对话摘要
+    - tool evidence memory：工具结果摘要
+- 长期：
+  - 按主题/任务拆分会话记忆
+  - 对重复上下文做去重
+  - 结合检索型 memory，而不是把全部历史都塞进 prompt
+
+预期收益：
+
+- 降低多轮对话上下文膨胀
+- 保留关键上下文而不是简单丢弃旧消息
+- 提升长会话场景下的稳定性和回答一致性
 
 预期收益：
 

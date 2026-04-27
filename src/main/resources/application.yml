@@ -70,6 +70,16 @@ document:
 rag:
   top-k: 3  # 检索返回的最相似文档数量
   model: "qwen3-max"  # 大语言模型名称
+  rerank:
+    enabled: false
+    recall-top-n: 10
+    final-top-k: 3
+    semantic-weight: 0.50
+    keyword-weight: 0.25
+    title-weight: 0.15
+    structure-weight: 0.10
+    min-final-score: 0.25
+    max-chunks-per-source: 2
 
 # Prometheus 配置
 prometheus:
